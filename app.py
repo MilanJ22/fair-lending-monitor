@@ -93,11 +93,12 @@ def load_stats():
 
 # ── Example queries ──────────────────────────────────────────────────────────────
 EXAMPLE_QUERIES = [
-    "Flag all lender × demographic segments with a disparity ratio above 2.0x.",
     "Which MSA has the highest concentration of Red-flag disparity segments?",
-    "Show me the denial reasons for the highest-disparity lender in Houston.",
+    "Are the Red-flag lenders in Minneapolis depository banks or non-depository mortgage companies?",
+    "Show me the individual flagged segments in Minneapolis for Black or African American applicants.",
     "Are there any lenders with a near-100% denial rate for Black or African American applicants?",
-    "Compare the top disparity exposures in the New York MSA across all demographics.",
+    "Show me the denial reasons for the highest-disparity lender in Minneapolis.",
+    "Compare disparity ratios for independent mortgage companies vs. banks in the Denver MSA.",
 ]
 
 
@@ -114,7 +115,7 @@ with st.sidebar:
     st.markdown("""
         <div style='font-size:0.78rem; color:#666; margin-bottom:1rem;'>
             <strong style='color:#0f2044;'>2024 HMDA Data</strong><br>
-            Home purchase loans · 5 major MSAs<br>
+            Home purchase loans · 15 major MSAs<br>
             Source: CFPB HMDA Data Browser
         </div>
     """, unsafe_allow_html=True)
@@ -157,7 +158,7 @@ st.markdown("""
     <div class='app-header'>
         <h1>⚖ Fair Lending Compliance Monitor</h1>
         <p>
-            Natural language analysis over 2024 HMDA data ·
+            Natural language analysis over 2024 HMDA data · 15 major MSAs ·
             Peer benchmarking · Disparity detection · Exam-ready recommendations
         </p>
     </div>

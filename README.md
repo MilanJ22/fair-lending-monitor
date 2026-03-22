@@ -10,7 +10,7 @@ Built to demonstrate the **Palantir AIP pattern**: raw regulatory data in, LLM-p
 
 Fair lending examiners use HMDA data to identify lenders whose denial rates for minority applicants are disproportionately high relative to peers. Historically, surfacing these patterns required weeks of manual analysis by analysts.
 
-This tool ingests 253,000+ home purchase loan records directly from the CFPB HMDA API, computes peer-benchmarked disparity ratios across every lender × race × MSA combination, and puts a compliance analyst (Claude) on top — so a fair lending officer can ask questions in plain English and get regulator-ready answers backed by real data.
+This tool ingests 880,000+ home purchase loan records directly from the CFPB HMDA API, computes peer-benchmarked disparity ratios across every lender × race × MSA combination, and puts a compliance analyst (Claude) on top — so a fair lending officer can ask questions in plain English and get regulator-ready answers backed by real data.
 
 **Example queries the system handles:**
 
@@ -27,7 +27,7 @@ This tool ingests 253,000+ home purchase loan records directly from the CFPB HMD
 CFPB HMDA API
      │
      ▼
-src/ingest.py       ← fetch 2024 LAR data for 5 MSAs via HMDA Data Browser API v2
+src/ingest.py       ← fetch 2024 LAR data for 15 MSAs via HMDA Data Browser API v2
      │
      ▼
 src/transform.py    ← clean, compute denial rates, peer benchmarks, disparity flags
@@ -36,7 +36,7 @@ src/transform.py    ← clean, compute denial rates, peer benchmarks, disparity 
 src/storage.py      ← persist to DuckDB (4 tables)
      │
      ▼
-src/agent.py        ← Claude (claude-sonnet-4-6) with 4 structured tools over DuckDB
+src/agent.py        ← Claude (claude-sonnet-4-6) with 7 structured tools over DuckDB
      │
      ▼
 app.py              ← Streamlit operator UI
@@ -46,20 +46,25 @@ app.py              ← Streamlit operator UI
 
 | Table | Description |
 |---|---|
-| `applications` | Cleaned LAR records (~253k rows) |
+| `applications` | Cleaned LAR records (~881k rows) |
 | `denial_rates` | Denial rate by lender × race × MSA |
 | `peer_benchmarks` | Average denial rate across all lenders by race × MSA |
 | `disparity_flags` | Disparity ratios + Red/Yellow flags per lender segment |
 | `denial_reasons` | Denial reason breakdown by lender × race × MSA |
+| `institutions` | Lender profiles — name, type, charter class, assets, parent company |
 
 **Claude tools:**
 
-| Tool | Purpose |
-|---|---|
-| `get_denial_rates` | Look up raw denial rates for any lender/demographic/MSA filter |
-| `compare_to_peers` | Benchmark one lender against the peer average — returns disparity ratios |
-| `flag_disparities` | Scan all lenders for segments exceeding a disparity threshold |
-| `get_denial_reasons` | Root-cause breakdown: why is a lender denying a specific group? |
+| Tool | Type | Purpose |
+|---|---|---|
+| `summarize_flags_by_msa` | Aggregate | Deterministic Red/Yellow flag counts per MSA via GROUP BY |
+| `summarize_flags_by_lender_type` | Aggregate | Depository vs. Non-Depository flag breakdown |
+| `summarize_denial_rates_by_race` | Aggregate | Volume-weighted market denial rate by demographic |
+| `summarize_denial_reasons` | Aggregate | Total denial reason citations ranked by frequency |
+| `compare_to_peers` | Drill-down | Benchmark one lender's denial rates against the peer average |
+| `flag_disparities` | Drill-down | Flagged segments for a specific MSA or demographic |
+| `get_denial_reasons` | Drill-down | Raw denial reason rows for a specific lender or market |
+| `get_lender_profile` | Lookup | Institution name, type, assets, and parent company by LEI |
 
 ---
 
@@ -86,7 +91,7 @@ Thresholds follow OCC and CFPB fair lending examination guidance:
 - **Year:** 2024
 - **Loan type:** Home purchase (loan_purpose=1)
 - **Outcomes included:** Originated, approved-not-accepted, denied (action_taken=1,2,3)
-- **MSAs:** Chicago · Houston · Atlanta · Los Angeles · New York
+- **MSAs:** New York · Los Angeles · Chicago · Dallas-Fort Worth · Houston · Washington DC · Miami · Philadelphia · Atlanta · Phoenix · Seattle · Boston · Charlotte · Minneapolis · Denver
 
 ---
 
@@ -110,7 +115,7 @@ Create a `.env` file:
 ANTHROPIC_API_KEY=your_key_here
 ```
 
-**Run the pipeline** (downloads ~253k records from CFPB, takes 2-3 minutes):
+**Run the pipeline** (downloads ~881k records from CFPB, takes 5-8 minutes):
 
 ```bash
 python pipeline.py
@@ -124,9 +129,51 @@ streamlit run app.py
 
 ---
 
-## Key Finding
+## Key Findings
 
-All 143 Red-flag and 64 Yellow-flag disparity segments are concentrated in the **Houston MSA**. The tool surfaces this immediately — and Claude correctly frames the follow-up question: is this a data quality issue, a non-QM/specialty lender market structure artifact, or a genuine fair lending pattern? That's the question that would take a compliance team weeks to arrive at. The tool gets you there in one query.
+Across 881,308 home purchase loan applications in 15 major U.S. metros, the tool surfaced **447 Red-flag** and **274 Yellow-flag** disparity segments — demonstrating that fair lending risk is a nationwide phenomenon, not isolated to individual markets.
+
+**Minneapolis leads with 20 Red-flag segments**, consistent with the Twin Cities' well-documented Black-white homeownership gap — one of the largest in the country. This is likely substantive fair lending exposure warranting immediate compliance review.
+
+**Houston (13), Denver (7), Phoenix (7), and Charlotte (6)** round out the top markets. Denver, Phoenix, and Charlotte are fast-growing Sun Belt metros with significant Hispanic populations — disparity patterns in these markets typically involve Hispanic applicants being denied at disproportionate rates relative to peers.
+
+Fair lending risk is distributed across geographies and demographics. No single market dominates — which means a compliance team relying on manual, market-by-market analysis would likely miss the full picture. The tool surfaces the complete exposure landscape in a single query.
+
+---
+
+## Screenshots
+
+The four queries below walk through a complete compliance workflow — from market-level triage to root cause — in a single conversation thread.
+
+### 1. Market Concentration — Where is the risk?
+
+![MSA Red Flag Concentration](screenshots/1.png)
+
+The tool ranks all 15 MSAs by Red-flag segment count using a deterministic `GROUP BY` query. Minneapolis leads, followed by Houston, Denver, Phoenix, and Charlotte. Key findings and regulatory risk framing are generated automatically beneath the table.
+
+---
+
+### 2. Institution Type Breakdown — Who is driving it?
+
+![Minneapolis Flagged Lenders by Institution Type](screenshots/2.png)
+
+Scoped to Minneapolis, the tool breaks down flagged segments by institution type. Non-depository mortgage companies account for the majority of Red-flag segments and distinct lenders — consistent with specialty lender concentration in the market rather than systemic bank-level discrimination.
+
+---
+
+### 3. Lender Deep-Dive — How bad is the worst offender?
+
+![Highest Disparity Lender Peer Comparison](screenshots/3.png)
+
+The tool identifies Credit Human Federal Credit Union as the highest-disparity lender in Minneapolis and surfaces its full peer comparison across demographics. The institution profile (type, state, assets) is pulled from the FFIEC institutions API and joined at query time. Pre-computed flag counts are embedded in the result — Claude reports numbers directly from SQL, not from counting rows.
+
+---
+
+### 4. Root Cause — Why is this lender denying at this rate?
+
+![Denial Reasons Breakdown](screenshots/4.png)
+
+Denial reasons are aggregated via `SUM` across all racial groups — returning authoritative citation counts, not row-level data for Claude to interpret. The regulatory risk assessment and recommended action follow, grounding the findings in OCC/CFPB examination guidance.
 
 ---
 

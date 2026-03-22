@@ -14,6 +14,7 @@ def save_all(
     peer_benchmarks: pd.DataFrame,
     disparity_flags: pd.DataFrame,
     denial_reasons: pd.DataFrame,
+    institutions: pd.DataFrame,
 ) -> None:
     """
     Write all processed DataFrames to DuckDB. Replaces existing tables on each run.
@@ -26,6 +27,7 @@ def save_all(
         "peer_benchmarks": peer_benchmarks,
         "disparity_flags": disparity_flags,
         "denial_reasons": denial_reasons,
+        "institutions": institutions,
     }
 
     for name, df in tables.items():

@@ -92,7 +92,7 @@ def compute_disparity_flags(
         how="left",
     )
 
-    merged["disparity_ratio"] = merged["denial_rate"] / merged["peer_avg_denial_rate"]
+    merged["disparity_ratio"] = (merged["denial_rate"] / merged["peer_avg_denial_rate"]).round(4)
 
     merged["disparity_flag"] = "Normal"
     merged.loc[merged["disparity_ratio"] >= DISPARITY_YELLOW, "disparity_flag"] = "Yellow"
